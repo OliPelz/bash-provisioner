@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+
+# set -x
+
+# we need this in every script
+this_script_dir=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)
+
+# globals
+
+SUPPORTED_LINUX_DISTROS='|arch|debian|redhat|'
+
+# other variables
+
+dry_run=0
+filter=""
+linux_distro="arch"
+
+# general functions
+function log() {
+   GREEN='\033[0;32m'
+   NOCOL='\033[0m'
+   if [[ $dry_run -eq 1 ]]; then
+      printf "${GREEN}[DRY_RUN]${NOCOL} $@\n"
+   else 
+      printf "$@\n" 
+   fi
+}
+
+# general functions
+function log_error() {
+   RED='\033[0;33m'
+   NOCOL='\033[0m'
+   printf "${RED}[ERROR]${NOCOL}$@\n"
+}
+
+function execute() {
+   log "Executing: '$@'"
+   if [[ $dry_run -eq 1 ]]; then
+      return
+   fi
+   "$@"
+}
+# parse parameters
+
+while [[ $# -gt "0" ]]; do
+ case "$1" in 
+    # switch
+    -d|--dry-run)
+       dry_run=1
+       shift
+       ;;
+    # parameter
+    -f|--filter)
+       filter=$2
+       shift 2
+       ;;
+    # parameter
+    -l|--linux-distro)
+       if ! echo "$SUPPORTED_LINUX_DISTROS" | grep -q "|$2|"; then
+          log_error "Your Linux distro '$2' is not supported...bailing out"
+          exit 1
+       fi
+       linux_distro=$2
+       shift 2
+       ;;
+    -h|--help)
+       echo "Usage: $0 [-d|--dry-run] [-l|--linux-distro <arch|debian|redhat>] [-f|--filter filterword]"
+       exit 0
+       ;;
+    *)
+   # no more options, break
+       break
+       ;;
+ esac
+done
+
+
+# find and output:
+# * all script filenames
+# * with max depth of 1 subdir
+# * only executables
+# * print the filename as well as the depth number
+# * and sort filenames like  a version pattern: 0000_xxx, 0001_xxx, 0010_xxx, 0011_xxx
+scripts=$(find ${this_script_dir}/provisions -mindepth 1 -maxdepth 2 -type f -executable -printf '%p %d\n' | sort -V)
+
+echo "$scripts" | while read script_name depth; do
+   pre_filter=0
+   if [[ $depth -eq 2 && "$(basename $script_name)" == "$linux_distro" ]]; then
+          # means if we found a distro specific filename ... 
+          # ...and this distro specific filename is matching our distro of choice 
+          log_error "found distro specific filename '$script_name'"         
+          pre_filter=1
+
+   elif [[ $depth -eq 1 ]]; then
+       # if this is a regular script file without distro specific content
+       # we always run
+       pre_filter=1
+   fi
+  
+   if [[ $pre_filter -eq 1 ]]; then
+      # check main filter
+      if echo "$script_name" | grep -qE "${filter}"; then
+         execute $script_name
+      fi
+   fi
+done
