@@ -6,7 +6,7 @@ set -euo pipefail
 # install neovim in specific version
 version="v0.10.2"
 
-echo "Installing Neovim version: $version"
+echo "🔄 Installing Neovim version: $version"
 
 src_dir="$HOME/bin/neovim_versions/$version/src"
 install_dir="$HOME/bin/neovim_versions/$version"
@@ -17,11 +17,12 @@ if [ -f /etc/os-release ]; then
     . /etc/os-release
     distro=$ID
 else
-    echo "Unsupported system: no /etc/os-release"
+    echo "❌ Unsupported system: no /etc/os-release 😢"
+    echo "🔍 Please check your distribution and try again."
     exit 1
 fi
 
-# Update packages based on distro
+# install packages needed to build neovim
 case "$distro" in
     debian|ubuntu)
         echo "Detected Ubuntu/Debian"
@@ -37,10 +38,10 @@ case "$distro" in
         sudo dnf install -y ninja-build cmake gcc gcc-c++ make gettext libtool autoconf automake pkgconfig lua-devel
         ;;
     *)
-        echo "Unsupported distro: $distro"
-        echo "Unsupported OS — please install build tools and dependencies manually."
+        echo "❌ Unsupported distro: $distro 😢"
+        echo "❌ please install neovim dependencies manually. ❌"
         exit 1
-        ;;
+	;;
 esac
 
 # Check if desired version is already installed

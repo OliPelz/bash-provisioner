@@ -3,14 +3,15 @@
 #set -x
 set -euo pipefail
 
-echo "Installing set of dev tools"
+echo "🔄 Installing set of dev tools"
 
 # Detect distro
 if [ -f /etc/os-release ]; then
     . /etc/os-release
     distro=$ID
 else
-    echo "Unsupported system: no /etc/os-release"
+    echo "❌ Unsupported system: no /etc/os-release 😢"
+    echo "🔍 Please check your distribution and try again."
     exit 1
 fi
 
@@ -19,21 +20,20 @@ case "$distro" in
     debian|ubuntu)
 	echo "Detected Ubuntu/Debian"
 	sudo apt update -y
-	sudo apt install -y tmux jq
+	sudo apt install -y build-essential
 	;;
     arch)
 	echo "Detected Arch Linux"
-	sudo pacman -Sy --noconfirm tmux jq
+	sudo pacman -Sy --noconfirm base-devel
 	;;
     rhel|centos|fedora)
 	echo "Detected RedHat/Fedora"
-	sudo dnf install -y tmux jq
 	sudo dnf groupinstall -y "Development Tools"
 	;;
     *)
-	echo "Unsupported distro: $distro"
-	echo "Unsupported OS — please install build tools and dependencies manually."
-	exit 1
+        echo "❌ Unsupported distro: $distro 😢"
+        echo "❌ please install set of dev tools manually. ❌"
+        exit 1
 	;;
 esac
 

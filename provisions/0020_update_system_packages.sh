@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+echo "🔄 Updating base system packages"
+
 # Detect distro
 if [ -f /etc/os-release ]; then
     . /etc/os-release
     distro=$ID
 else
-    echo "Unsupported system: no /etc/os-release"
+    echo "❌ Unsupported system: no /etc/os-release 😢"
+    echo "🔍 Please check your distribution and try again."
     exit 1
 fi
 
@@ -36,10 +39,12 @@ case "$distro" in
         sudo dnf -y upgrade
         ;;
     *)
-        echo "Unsupported distro: $distro"
+        echo "❌ Unsupported distro: $distro 😢"
         exit 1
         ;;
 esac
+
+echo echo "✅ System packages update complete!"
 
 # Check new kernel and glibc versions
 new_kernel=$(uname -r)
@@ -63,10 +68,10 @@ if [ "$current_glibc" != "$new_glibc" ]; then
 fi
 
 if [ "$reboot_required" = true ]; then
-    echo "Rebooting system...you got 20 seconds to abort this now (CTRL+c)"
-    echo "Please restart this script after reboot"
+    echo "🚀✨ Rebooting system ✨🚀"
+    echo "...you got 20 seconds to abort this now (CTRL+c)"
     sleep 20
     sudo reboot
 else
-    echo "No reboot required."
+    echo "🎉 No reboot required."
 fi
