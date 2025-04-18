@@ -9,10 +9,12 @@ if awk '/# BASHRC-CONFIG/,/\/BASHRC-CONFIG/' ~/.bashrc | grep -q '# BASHRC-CONFI
    exit 0 
 fi
 
-echo '# BASHRC-CONFIG
-source ${HOME}/.bashrc-config
+echo '
+# BASHRC-CONFIG
+test -f ${HOME}/.bashrc-config && source ${HOME}/.bashrc-config
 # /BASHRC-CONFIG' >> ~/.bashrc
 
 echo "✅ Successfully installed .bashrc-config in .bashrc"
+
 
 exit 0
