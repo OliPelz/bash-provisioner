@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+
+# essential path settings
+
+export PATH="${HOME}/bin:${HOME}/.local/bin:${PATH}"
+
+################ History settings (better format, unlimited size)
+
+# filename to history
+export HISTFILE=~/.bash_history
+
+# Set unlimited history size, tested in my bash version
+export HISTSIZE=-1
+export HISTFILESIZE=-1
+
+# Append to the history file, don't overwrite it
+shopt -s histappend
+
+# Save multi-line commands as a single command
+shopt -s cmdhist
+
+# Ignore duplicate commands and commands that start with a space
+export HISTCONTROL=ignoredups
+
+# Save each command with a timestamp
+export HISTTIMEFORMAT="[%F %T] "
+
+# Save the history after each command
+export PROMPT_COMMAND="history -a; history -c; history -r; $PROMPT_COMMAND" # immediate append after every command, share between sessions (can be expensive if file gets big)
+
+################ End of History settings (better format, unlimited size)
+
+export EDITOR=vim
+
