@@ -17,19 +17,24 @@ fi
 
 mkdir -p $HOME/bin
 
-PATH=$HOME/bin:$PATH
+export PATH=$HOME/bin:$PATH
 
-yq -r '.gz_tar_balls[] | "\(.name) \(.version_name) \(.link_to_bin) \(.download_url)"' install_from_http.yaml | while read NAME VERSION_NAME LINK_TO_BIN DOWNLOAD_URL; do
-   echo $NAME
-   echo $VERSION_NAME
-   echo $LINK_TO_BIN
-   echo $DOWNLOAD_URL
-
-
+# installing gzip tar balls from http
+yq -r '.gz_tar_balls[] | "\(.link_name) \(.extract_dir) \(.path_to_bin) \(.download_url)"' install_from_http.yaml | while read -r LINK_NAME EXTRACT_DIR PATH_TO_BIN DOWNLOAD_URL; do
+   DEST_DIR=$HOME/bin/$LINK_NAME-versions/$EXTRACT_DIR
+   if ! test -f $DEST_DIR/$PATH_TO_BIN; then
+      mkdir -p $DEST_DIR
+      # download and put the archives content to a new top-level dir
+      # Hint: the --strip-components=1 option removes the top-level directory from the file paths
+      curl -L "$DOWNLOAD_URL" | tar -xz --strip-components=1 -C "$DEST_DIR"
+      
+      # force re-creation of link
+      test -L $HOME/bin/$LINK_NAME && unlink $HOME/bin/$LINK_NAME
+      ln -sf $DEST_DIR/$PATH_TO_BIN $HOME/bin/$LINK_NAME
+      
+      echo "downloaded binary $LINK_NAME, installed under $HOME/bin/$LINK_NAME linking to $DEST_DIR/$PATH_TO_BIN"
+   fi
 done 
-
-
-
 
 
 # Update packages based on distro

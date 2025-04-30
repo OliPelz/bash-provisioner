@@ -1,27 +1,27 @@
 gz_tar_balls:
-  - name: keychain # manager for ssh sessions
-    version_name: keychain-2.8.5
-    link_to_bin: keychain-2.8.5/keychain
+  - link_name: keychain # manager for ssh sessions
+    extract_dir: keychain-2.8.5
+    path_to_bin: keychain
     download_url: https://github.com/funtoo/keychain/archive/refs/tags/2.8.5.tar.gz
-  - name: geckodriver  # we install geckodriver as our selenium firefox webdriver
-    version_name: geckodriver-v0.34.0-linux64 
-    link_to_bin: geckodriver
+  - link_name: geckodriver  # we install geckodriver as our selenium firefox webdriver
+    extract_dir: geckodriver-v0.34.0
+    path_to_bin: geckodriver
     download_url: https://github.com/mozilla/geckodriver/releases/download/v0.34.0/geckodriver-v0.34.0-linux64.tar.gz
-  - name: hurl  # cli http test framework
-    version_name: hurl-4.2.0
-    link_to_bin: hurl-4.2.0-x86_64-unknown-linux-gnu/hurl
+  - link_name: hurl  # cli http test framework
+    extract_dir: hurl-4.2.0
+    path_to_bin: hurl
     download_url: https://github.com/Orange-OpenSource/hurl/releases/download/4.2.0/hurl-4.2.0-x86_64-unknown-linux-gnu.tar.gz
-  - name: git-trim # trim local branches if remote are gone
-    version_name: git-trim-0.4.3
-    link_to_bin: git-trim/git-trim
+  - link_name: git-trim # trim local branches if remote are gone
+    extract_dir: git-trim-v0.4.3
+    path_to_bin: git-trim
     download_url: https://github.com/foriequal0/git-trim/releases/download/v0.4.3/git-trim-linux-v0.4.3.tgz
-  - name: starship # beautiful shell prompt
-    version_name: starship-1.17.1
-    link_to_bin: starship
+  - link_name: starship # beautiful shell prompt
+    extract_dir: starship-v1.17.1
+    path_to_bin: starship
     download_url: https://github.com/starship/starship/releases/download/v1.17.1/starship-x86_64-unknown-linux-gnu.tar.gz
-  - name: mcfly # modern shell history search (ctrl+r) replacement
-    version_name: mcfly-0.8.4
-    link_to_bin: mcfly
+  - link_name: mcfly # modern shell history search (ctrl+r) replacement
+    extract_dir: mcfly-v0.8.4
+    path_to_bin: mcfly
     download_url: https://github.com/cantino/mcfly/releases/download/v0.8.4/mcfly-v0.8.4-x86_64-unknown-linux-musl.tar.gz
 
 raw_binaries: []
