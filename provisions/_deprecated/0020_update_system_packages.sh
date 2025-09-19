@@ -1,17 +1,11 @@
-#!/usr/bin/env bash
+#!/bin/bash
 set -euo pipefail
 
-echo "🔄 Updating base system packages"
+# --- Source section ---
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/_utils.sh"
 
-# Detect distro
-if [ -f /etc/os-release ]; then
-    . /etc/os-release
-    distro=$ID
-else
-    echo "❌ Unsupported system: no /etc/os-release 😢"
-    echo "🔍 Please check your distribution and try again."
-    exit 1
-fi
+echo "🔄 Updating base system packages"
 
 echo "Detected distro: $distro"
 
