@@ -47,12 +47,12 @@ Options:
   -d, --dry-run            Print actions without executing.
   -w, --workflow NAME      Workflow name (default: install).
   -f, --filter LIST        Comma-separated list of script names to run (exact match).
-  -t, --run-test-only      Run tests only.
-  -s, --run-script-only    Run scripts only.
+  -t, --run-tests-only      Run tests only.
+  -s, --run-scripts-only    Run scripts only.
   -h, --help               Show this help.
 
 Notes:
-- Workflow file must exist at: provisions/workflow/<workflow>.sh
+- Workflow file must exist at: provisions/workflows/<workflow>.sh
 - Entries in workflow file are relative paths under 'provisions/', e.g. 'setup/os.sh'
 - Matching test file is: provisions/tests/test_<entry>
 EOF
@@ -65,9 +65,9 @@ while [[ $# -gt 0 ]]; do
       dry_run=1; shift ;;
     -f|--filter)
       filter="${2:-}"; shift 2 ;;
-    -t|--run-test-only)
+    -t|--run-tests-only)
       run_test_only=1; shift ;;
-    -s|--run-script-only)
+    -s|--run-scripts-only)
       run_script_only=1; shift ;;
     -w|--workflow)
       workflow="${2:-}"; shift 2 ;;
@@ -84,11 +84,11 @@ done
 
 # guard against conflicting flags
 if [[ $run_test_only -eq 1 && $run_script_only -eq 1 ]]; then
-  log_error "Choose only one of --run-test-only or --run-script-only."
+  log_error "Choose only one of --run-tests-only or --run-scripts-only."
   exit 2
 fi
 
-workflow_file="${this_script_dir}/provisions/workflow/${workflow}.sh"
+workflow_file="${this_script_dir}/provisions/workflows/${workflow}.sh"
 if [[ ! -f "$workflow_file" ]]; then
   log_error "Cannot find workflow file: $workflow_file ... bailing out"
   exit 1
