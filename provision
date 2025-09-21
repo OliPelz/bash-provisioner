@@ -48,7 +48,7 @@ if [[ $run_test_only -eq 1 && $run_script_only -eq 1 ]]; then
   exit 2
 fi
 
-workflow_file="${this_script_dir}/provisions/workflow/${workflow}.sh"
+workflow_file="${this_script_dir}/provisions/workflows/${workflow}.sh"
 if [[ ! -f "$workflow_file" ]]; then
   echo "Workflow file not found: $workflow_file" >&2
   exit 1
