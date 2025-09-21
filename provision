@@ -1,106 +1,176 @@
 #!/usr/bin/env bash
-
-# set -x
+set -o pipefail
 
 # we need this in every script
-this_script_dir=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)
+this_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # globals
-
-SUPPORTED_LINUX_DISTROS='|arch|debian|redhat|'
+SUPPORTED_LINUX_DISTROS='|arch|debian|redhat|'  # (currently unused)
 
 # other variables
-
 dry_run=0
 filter=""
-linux_distro="arch"
+workflow="install"
+run_test_only=0
+run_script_only=0
 
-# general functions
-function log() {
-   GREEN='\033[0;32m'
-   NOCOL='\033[0m'
-   if [[ $dry_run -eq 1 ]]; then
-      printf "${GREEN}[DRY_RUN]${NOCOL} $@\n"
-   else 
-      printf "$@\n" 
-   fi
+# --- logging helpers ---------------------------------------------------------
+log() {
+  local GREEN='\033[0;32m'
+  local NOCOL='\033[0m'
+  if [[ $dry_run -eq 1 ]]; then
+    printf "${GREEN}[DRY_RUN]${NOCOL} %b\n" "$*"
+  else
+    printf "%b\n" "$*"
+  fi
 }
 
-# general functions
-function log_error() {
-   RED='\033[0;33m'
-   NOCOL='\033[0m'
-   printf "${RED}[ERROR]${NOCOL}$@\n"
+log_error() {
+  local RED='\033[0;31m'
+  local NOCOL='\033[0m'
+  printf "${RED}[ERROR]${NOCOL} %b\n" "$*" 1>&2
 }
 
-function execute() {
-   log "Executing: '$@'"
-   if [[ $dry_run -eq 1 ]]; then
-      return
-   fi
-   "$@"
+execute() {
+  log "Executing: $*"
+  if [[ $dry_run -eq 1 ]]; then
+    return 0
+  fi
+  "$@"
 }
-# parse parameters
 
-while [[ $# -gt "0" ]]; do
- case "$1" in 
-    # switch
+usage() {
+  cat <<EOF
+Usage: $0 [options]
+
+Options:
+  -d, --dry-run            Print actions without executing.
+  -w, --workflow NAME      Workflow name (default: install).
+  -f, --filter LIST        Comma-separated list of script names to run (exact match).
+  -t, --run-test-only      Run tests only.
+  -s, --run-script-only    Run scripts only.
+  -h, --help               Show this help.
+
+Notes:
+- Workflow file must exist at: provisions/workflow/<workflow>.sh
+- Entries in workflow file are relative paths under 'provisions/', e.g. 'setup/os.sh'
+- Matching test file is: provisions/tests/test_<entry>
+EOF
+}
+
+# --- arg parsing -------------------------------------------------------------
+while [[ $# -gt 0 ]]; do
+  case "$1" in
     -d|--dry-run)
-       dry_run=1
-       shift
-       ;;
-    # parameter
+      dry_run=1; shift ;;
     -f|--filter)
-       filter=$2
-       shift 2
-       ;;
-    # parameter
-    -l|--linux-distro)
-       if ! echo "$SUPPORTED_LINUX_DISTROS" | grep -q "|$2|"; then
-          log_error "Your Linux distro '$2' is not supported...bailing out"
-          exit 1
-       fi
-       linux_distro=$2
-       shift 2
-       ;;
+      filter="${2:-}"; shift 2 ;;
+    -t|--run-test-only)
+      run_test_only=1; shift ;;
+    -s|--run-script-only)
+      run_script_only=1; shift ;;
+    -w|--workflow)
+      workflow="${2:-}"; shift 2 ;;
     -h|--help)
-       echo "Usage: $0 [-d|--dry-run] [-l|--linux-distro <arch|debian|redhat>] [-f|--filter filterword]"
-       exit 0
-       ;;
+      usage; exit 0 ;;
+    --) shift; break ;;
     *)
-   # no more options, break
-       break
-       ;;
- esac
+      log_error "Unknown option: $1"
+      usage
+      exit 2
+      ;;
+  esac
 done
 
+# guard against conflicting flags
+if [[ $run_test_only -eq 1 && $run_script_only -eq 1 ]]; then
+  log_error "Choose only one of --run-test-only or --run-script-only."
+  exit 2
+fi
 
-# find and output:
-# * all script filenames
-# * with max depth of 1 subdir
-# * only executables
-# * print the filename as well as the depth number
-# * and sort filenames like  a version pattern: 0000_xxx, 0001_xxx, 0010_xxx, 0011_xxx
-scripts=$(find ${this_script_dir}/provisions -mindepth 1 -maxdepth 2 -type f -executable -printf '%p %d\n' | sort -V)
+workflow_file="${this_script_dir}/provisions/workflow/${workflow}.sh"
+if [[ ! -f "$workflow_file" ]]; then
+  log_error "Cannot find workflow file: $workflow_file ... bailing out"
+  exit 1
+fi
 
-echo "$scripts" | while read script_name depth; do
-   pre_filter=0
-   if [[ $depth -eq 2 && "$(basename $script_name)" == "$linux_distro" ]]; then
-          # means if we found a distro specific filename ... 
-          # ...and this distro specific filename is matching our distro of choice 
-          log_error "found distro specific filename '$script_name'"         
-          pre_filter=1
+# build filter list (array) from comma-separated string
+IFS=',' read -r -a FILTER_LIST <<< "$filter"
 
-   elif [[ $depth -eq 1 ]]; then
-       # if this is a regular script file without distro specific content
-       # we always run
-       pre_filter=1
-   fi
-  
-   if [[ $pre_filter -eq 1 ]]; then
-      # check main filter
-      if echo "$script_name" | grep -qE "${filter}"; then
-         execute $script_name
-      fi
-   fi
-done
+in_filter() {
+  # returns 0 if the given script name matches the filter (or filter is empty)
+  local name="$1"
+  if [[ ${#FILTER_LIST[@]} -eq 0 || -z "${FILTER_LIST[*]// }" ]]; then
+    return 0
+  fi
+  local f
+  for f in "${FILTER_LIST[@]}"; do
+    # exact match against the entry as it appears in the workflow (no path rewriting)
+    if [[ "$name" == "$f" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# read non-empty, non-comment lines from workflow file
+# shellcheck disable=SC2013
+while IFS= read -r line; do
+  # trim leading/trailing whitespace
+  script_name="$(printf "%s" "$line" | awk '{$1=$1; print}')"
+  # skip comments and blank lines
+  [[ -z "$script_name" || "$script_name" =~ ^# ]] && continue
+
+  if ! in_filter "$script_name"; then
+    log "Skipping (filtered out): $script_name"
+    continue
+  fi
+
+  script_path="${this_script_dir}/provisions/${script_name}"
+  test_path="${this_script_dir}/provisions/tests/test_${script_name}"
+
+  # decide what to run
+  do_run_script=1
+  do_run_test=1
+  if [[ $run_test_only -eq 1 ]]; then
+    do_run_script=0
+  elif [[ $run_script_only -eq 1 ]]; then
+    do_run_test=0
+  fi
+
+  # checks
+  if [[ $do_run_script -eq 1 && ! -x "$script_path" ]]; then
+    if [[ -f "$script_path" ]]; then
+      log "Making script executable: $script_path"
+      execute chmod +x "$script_path"
+    else
+      log_error "Script not found: $script_path"
+      # if only running scripts, fail fast; otherwise continue to allow tests
+      [[ $do_run_test -eq 0 ]] && exit 1
+      do_run_script=0
+    fi
+  fi
+
+  if [[ $do_run_test -eq 1 && ! -x "$test_path" ]]; then
+    if [[ -f "$test_path" ]]; then
+      log "Making test executable: $test_path"
+      execute chmod +x "$test_path"
+    else
+      log_error "Test not found: $test_path"
+      # if only running tests, fail; otherwise continue to run script
+      [[ $do_run_script -eq 0 ]] && exit 1
+      do_run_test=0
+    fi
+  fi
+
+  # execute in order: script then test (unless flags change that)
+  if [[ $do_run_script -eq 1 ]]; then
+    execute "$script_path"
+  fi
+
+  if [[ $do_run_test -eq 1 ]]; then
+    execute "$test_path"
+  fi
+
+done < <(awk 'NF && $1 !~ /^#/' "$workflow_file")
+
