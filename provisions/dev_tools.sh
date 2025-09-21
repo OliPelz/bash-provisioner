@@ -20,7 +20,7 @@ check_commands_installed sudo || {
 log INFO "🔄 Installing set of dev tools"
 
 if distro=$(detect_linux_distro); then
-   log INFO "✅ Detected distro: $distro"
+   log INFO "✅ Detected distro: '$distro'"
 else
    log INFO "❌ Failed to detect Linux distribution" >&2
    exit 1

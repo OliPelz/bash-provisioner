@@ -89,10 +89,11 @@ v.0.0.1
     # shellcheck disable=SC1091
     . /etc/os-release
     LINUX_DISTRO="${ID,,}" # ensure lowercase
-    echo "Detected Linux distribution: $LINUX_DISTRO"
+    # return linux distro name
+    echo "$LINUX_DISTRO"
     return 0
   else
-    echo "❌ Could not detect distribution: /etc/os-release missing"
+    log ERROR "❌ Could not detect distribution: /etc/os-release missing"
     return 1
   fi
 }
