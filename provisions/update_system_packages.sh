@@ -1,6 +1,6 @@
 #!/bin/bash
 set -euo pipefail
-
+set -x
 # --- Source section ---
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/_utils.sh"
@@ -39,17 +39,17 @@ fi
 case "$distro" in
     debian|ubuntu)
         echo "Detected Ubuntu/Debian"
-        sudo apt update
-        sudo apt -y full-upgrade
-        sudo apt -y autoremove
+        sudo -E apt update
+        sudo -E apt -y full-upgrade
+        sudo -E apt -y autoremove
         ;;
     arch)
         echo "Detected Arch Linux"
-        sudo pacman -Syu --noconfirm
+        sudo -E pacman -Syu --noconfirm
         ;;
     rhel|centos|rocky|almalinux|fedora)
         echo "Detected RedHat/Fedora"
-        sudo dnf -y upgrade
+        sudo -E dnf -y upgrade
         ;;
     *)
         echo "❌ Unsupported distro: $distro 😢"

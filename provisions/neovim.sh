@@ -31,16 +31,16 @@ fi
 case "$distro" in
     debian|ubuntu)
         echo "Detected Ubuntu/Debian"
-        sudo apt update -y
-        sudo apt -y install ninja-build gettext cmake unzip curl build-essential libtool libtool-bin autoconf automake pkg-config liblua5.1-0-dev
+        sudo -E apt update -y
+        sudo -E apt -y install ninja-build gettext cmake unzip curl build-essential libtool libtool-bin autoconf automake pkg-config liblua5.1-0-dev
         ;;
     arch)
         echo "Detected Arch Linux"
-        sudo pacman -Sy --noconfirm base-devel cmake unzip ninja gettext lua
+        sudo -E pacman -Sy --noconfirm base-devel cmake unzip ninja gettext lua
         ;;
     rhel|centos|fedora)
         echo "Detected RedHat/Fedora"
-        sudo dnf install -y ninja-build cmake gcc gcc-c++ make gettext libtool autoconf automake pkgconfig lua-devel
+        sudo -E dnf install -y ninja-build cmake gcc gcc-c++ make gettext libtool autoconf automake pkgconfig lua-devel
         ;;
     *)
         echo "❌ Unsupported distro: $distro 😢"

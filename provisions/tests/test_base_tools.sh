@@ -1,40 +1,20 @@
-#!/bin/bash
-set -euo pipefail
+#!/usr/bin/env bash
+set -Eeuo pipefail
+trap 'rc=$?; echo -e "\e[31m[TEST-ERROR]\e[0m $0:$LINENO: \"$BASH_COMMAND\" exited with $rc" >&2' ERR
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+export TEST_FAIL_FAST=1
 source "${ROOT_DIR}/_utils.sh"
 
-log INFO "Now executing $(basename "${0}")"
-
-rc=0
-PASS(){ log INFO "✅ $*"; }
-FAIL(){ log ERROR "❌ $*"; rc=1; }
+success "Now executing $(basename "$0")"
 
 # Respect the version the host was provisioned with (or default)
 YQ_VERSION="${YQ_VERSION:-4.45.1}"
 export PATH="$HOME/bin:$PATH"
 
-# --- yq: symlink exists, target exists & executable, and version matches ---
-if [ -L "$HOME/bin/yq" ]; then
-  target="$(readlink -f "$HOME/bin/yq" || true)"
-  if [[ -n "${target:-}" && -f "$target" && -x "$target" ]]; then
-    # yq --version prints "... version 4.45.1"
-    installed="$("$HOME/bin/yq" --version 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="version") {print $(i+1); exit}}')"
-    if [[ "$installed" == "$YQ_VERSION" ]]; then
-      PASS "yq present via symlink and version is $installed"
-    else
-      FAIL "yq version mismatch: expected $YQ_VERSION, got ${installed:-<none>}"
-    fi
-  else
-    FAIL "yq symlink target missing or not executable: ${target:-<none>}"
-  fi
-else
-  FAIL "yq symlink missing at \$HOME/bin/yq"
-fi
-
-# Helper: some tools might live in sbin
-has_bin(){
+# helper: some tools might live in sbin
+has_bin() {
   local b="$1"
   command -v "$b" >/dev/null 2>&1 && return 0
   for p in /usr/sbin /sbin /usr/local/sbin; do
@@ -43,37 +23,50 @@ has_bin(){
   return 1
 }
 
-# Verify base tools by checking their binaries
+# --- yq symlink & version ---
+if [[ -L "$HOME/bin/yq" ]]; then
+  target="$(readlink -f "$HOME/bin/yq" || true)"
+  [[ -n "${target:-}" ]] || fail "yq symlink target is empty"
+  [[ -f "$target" ]]     || fail "yq symlink target missing: ${target:-<none>}"
+  [[ -x "$target" ]]     || fail "yq symlink target not executable: $target"
+
+  installed_raw="$("$HOME/bin/yq" --version 2>/dev/null || true)"
+  installed="$(printf '%s' "$installed_raw" | sed -E 's/.*v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/')"
+  assert_eq "$YQ_VERSION" "$installed" "yq version should match"
+  success "yq present via symlink and version is $installed"
+else
+  fail "yq symlink missing at \$HOME/bin/yq"
+fi
+
+# --- binaries present ---
 for b in htop xclip tmux jq curl; do
   if has_bin "$b"; then
-    PASS "binary available: $b"
+    success "binary available: $b"
   else
-    FAIL "binary missing: $b"
+    fail "binary missing: $b"
   fi
 done
 
-# net-tools check (ifconfig or netstat)
+# --- net-tools ---
 if has_bin ifconfig || has_bin netstat; then
-  PASS "net-tools present (ifconfig/netstat)"
+  success "net-tools present (ifconfig/netstat)"
 else
-  FAIL "net-tools not found (ifconfig/netstat)"
+  fail "net-tools not found (ifconfig/netstat)"
 fi
 
-# Optional package-manager confirmation (best-effort; non-fatal if absent)
+# --- optional package manager confirmations (non-fatal info) ---
 if command -v dpkg >/dev/null 2>&1; then
   for p in htop net-tools xclip tmux jq curl; do
-    if dpkg -s "$p" >/dev/null 2>&1; then PASS "dpkg shows installed: $p"; fi
+    dpkg -s "$p" >/dev/null 2>&1 && success "dpkg shows installed: $p" || true
   done
 elif command -v pacman >/dev/null 2>&1; then
   for p in htop net-tools xclip tmux jq curl; do
-    if pacman -Q "$p" >/dev/null 2>&1; then PASS "pacman shows installed: $p"; fi
+    pacman -Q "$p" >/dev/null 2>&1 && success "pacman shows installed: $p" || true
   done
 elif command -v rpm >/dev/null 2>&1; then
   for p in htop net-tools xclip tmux jq curl; do
-    if rpm -q "$p" >/dev/null 2>&1; then PASS "rpm shows installed: $p"; fi
+    rpm -q "$p" >/dev/null 2>&1 && success "rpm shows installed: $p" || true
   done
 fi
 
-if [ "$rc" -eq 0 ]; then PASS "base_tools: all checks passed"; else FAIL "base_tools: one or more checks failed"; fi
-exit "$rc"
-
+success "base_tools: all checks passed"

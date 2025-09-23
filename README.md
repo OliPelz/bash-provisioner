@@ -5,7 +5,7 @@ variables to control
 YQ_VERSION="${YQ_VERSION:-4.45.1}"
 UPDATE_ALLOW_REBOOT defaults to true, which will automatically reboot after important updates
 NEOVIM_VERSION="v${NEOVIM_VERSION:-0.10.2}"
-
+DISABLE_IPV6
 
 my bash provisioner to provision my machines!
 contains:

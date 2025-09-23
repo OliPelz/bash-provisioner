@@ -1,17 +1,16 @@
-#!/bin/bash
-set -euo pipefail
+#!/usr/bin/env bash
+set -Eeuo pipefail
+trap 'rc=$?; echo -e "\e[31m[TEST-ERROR]\e[0m $0:$LINENO: \"$BASH_COMMAND\" exited with $rc" >&2' ERR
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+export TEST_FAIL_FAST=1
 source "${ROOT_DIR}/_utils.sh"
-log INFO "Now executing $(basename "${0}")"
 
-rc=0
-PASS(){ log INFO "✅ $*"; }
-FAIL(){ log ERROR "❌ $*"; rc=1; }
-
+success "Now executing $(basename "$0")"
 export PATH="$HOME/bin:$PATH"
 
-# Verify the YAML-driven installs (from install_from_http.yaml)
+# name|extract-dir|binary-path-relative-to-extract
 entries=(
   "keychain|keychain-2.8.5|keychain"
   "geckodriver|geckodriver-v0.34.0|geckodriver"
@@ -22,24 +21,22 @@ entries=(
 )
 
 for e in "${entries[@]}"; do
-  IFS='|' read -r name extract path <<<"$e"
+  IFS='|' read -r name extract rel <<<"$e"
   link="$HOME/bin/$name"
-  dest="$HOME/bin/${name}-versions/${extract}/${path}"
-  if [ -L "$link" ] && [ -f "$dest" ] && [ -x "$dest" ]; then
-    PASS "$name installed: $link → $dest"
-  else
-    FAIL "$name not properly installed (link/target/executable bit)"
-  fi
+  dest="$HOME/bin/${name}-versions/${extract}/${rel}"
+
+  [[ -L "$link" ]] || fail "$name symlink missing: $link"
+  [[ -f "$dest" ]] || fail "$name target missing: $dest"
+  [[ -x "$dest" ]] || fail "$name target not executable: $dest"
+  success "$name installed: $link → $dest"
 done
 
-# Light sanity: versions run for a subset (won’t modify system)
+# sanity: --version runs for a subset
 for b in geckodriver hurl starship git-trim; do
-  if command -v "$b" >/dev/null 2>&1 && "$b" --version >/dev/null 2>&1; then
-    PASS "$b --version runs"
-  else
-    FAIL "$b not usable (not on PATH or --version failed)"
-  fi
+  command -v "$b" >/dev/null 2>&1 || fail "$b not on PATH"
+  "$b" --version >/dev/null 2>&1 || fail "$b --version failed"
+  success "$b --version runs"
 done
 
-if [ "$rc" -eq 0 ]; then PASS "install_from_http: all checks passed"; else FAIL "install_from_http: one or more checks failed"; fi
-exit "$rc"
+success "install_from_http: all checks passed"
+

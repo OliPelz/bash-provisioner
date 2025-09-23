@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-set -o pipefail
+set -Eeuo pipefail
+trap 'rc=$?; echo -e "\e[31m[WRAPPER-ERROR]\e[0m $0:$LINENO: \"$BASH_COMMAND\" exited with $rc" >&2' ERR
+# set -x  # optional
 
 this_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -71,23 +73,32 @@ in_filter() {
 
 # --- runner helpers -----------------------------------------------------------
 run_bash() {
-  # run a file via bash (no chmod), honoring dry-run
+  local path="$1"
+  if [[ $dry_run -eq 1 ]]; then
+    printf "\033[0;32m[DRY_RUN]\033[0m bash %s\n" "$path"; return 0
+  fi
+  bash -Eeuo pipefail "$path"
+}
+
+run_bash.DEPRECATED() {
+  # run a file via bash (no chmod), honoring dry-run, de-duplicating output
   local path="$1"
   if [[ $dry_run -eq 1 ]]; then
     log_dry "bash $path"
     return 0
   fi
-  bash "$path"
+  # Deduplicate only consecutive identical lines while preserving exit code
+  set +e
+  bash "$path" 2>&1 | awk 'NR==1{prev=$0; print; next} { if ($0!=prev) print; prev=$0 }'
+  local status=${PIPESTATUS[0]}
+  set -e
+  return $status
 }
 
 # --- main loop ---------------------------------------------------------------
-# read non-empty, non-comment lines
-while IFS= read -r line; do
-  # trim whitespace
-  script_name="$(printf "%s" "$line" | awk '{$1=$1; print}')"
+# read non-empty, non-comment lines (already trims & skips with awk)
+while IFS= read -r script_name; do
   [[ -z "$script_name" || "$script_name" =~ ^# ]] && continue
-
-  # filter check
   in_filter "$script_name" || continue
 
   script_path="${this_script_dir}/provisions/${script_name}"
@@ -99,18 +110,16 @@ while IFS= read -r line; do
   [[ $run_script_only -eq 1 ]] && do_run_test=0
 
   # run script (silent skip if missing)
-  if [[ $do_run_script -eq 1 ]]; then
-    if [[ -f "$script_path" ]]; then
-      run_bash "$script_path"
-    fi
+  if [[ $do_run_script -eq 1 && -f "$script_path" ]]; then
+    run_bash "$script_path"
   fi
 
   # run test (silent skip if missing)
-  if [[ $do_run_test -eq 1 ]]; then
-    if [[ -f "$test_path" ]]; then
-      run_bash "$test_path"
-    fi
+  if [[ $do_run_test -eq 1 && -f "$test_path" ]]; then
+    run_bash "$test_path"
   fi
 
 done < <(awk 'NF && $1 !~ /^#/' "$workflow_file")
+
+exit 0
 

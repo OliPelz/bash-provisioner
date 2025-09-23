@@ -30,16 +30,16 @@ fi
 case "$distro" in
     debian|ubuntu)
 	echo "Detected Ubuntu/Debian"
-	sudo apt update -y
-	sudo apt install -y build-essential
+	sudo -E apt update -y
+	sudo -E apt install -y build-essential
 	;;
     arch)
 	echo "Detected Arch Linux"
-	sudo pacman -Sy --noconfirm base-devel
+	sudo -E pacman -Sy --noconfirm base-devel
 	;;
     rhel|centos|fedora)
 	echo "Detected RedHat/Fedora"
-	sudo dnf groupinstall -y "Development Tools"
+	sudo -E dnf groupinstall -y "Development Tools"
 	;;
     *)
         echo "❌ Unsupported distro: $distro 😢"
