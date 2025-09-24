@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-# set -x
+set -x
 : '
 v0.04
-Package Manager Wrapper Script (strict, retries, IPv4-aware; os-release detection)
+Package Manager Wrapper Script (strict, retries, IPv4-aware)
 
 ShortDesc:
   A single interface over common Linux package managers (pacman, dnf, apt-get),
   with optional proxy support, IPv4-only mode, strict error handling, timeouts,
-  and automatic retries. Supports Arch AUR helpers (yay/paru). Package manager
-  selection is based on /etc/os-release (with a small binary fallback).
+  and automatic retries. Supports Arch AUR helpers (yay/paru).
 
 USAGE
   ./package-mgr \
@@ -142,9 +141,11 @@ run_with_retries() {
     tlog="$(mktemp)"
     fc_log_info2 "Attempt ${attempt}/${PM_RETRIES}: ${desc}"
     set +e
+    # shellcheck disable=SC2145
     "$@" > >(tee "$tlog") 2>&1
     rc=$?
     set -e
+    # If a post_check function is provided, let it decide pass/fail even when rc==0
     if (( rc == 0 )) && [[ -n "$post_check" ]]; then
       if ! "$post_check" "$tlog"; then
         rc=1
@@ -185,6 +186,13 @@ fi
 
 # ------- APT (use apt-get; apt is not stable for scripts) --------------------
 apt_update() {
+  local proxy_opts=() ca_opts=()
+  if [[ "${USE_PROXY:-false}" == "true" && -n "${HTTPS_PROXY:-}" ]]; then
+    proxy_opts=(-o Acquire::http::Proxy="$HTTPS_PROXY" -o Acquire::https::Proxy="$HTTPS_PROXY")
+  fi
+  if [[ -n "${TEMP_CERT_FILE:-}" ]]; then
+    ca_opts=(-o Acquire::https::Verify-Peer=true -o Acquire::https::CaInfo="$TEMP_CERT_FILE")
+  fi
   run_with_retries \
     "apt-get update" apt_log_ok \
     sudo -E apt-get update \
@@ -192,12 +200,20 @@ apt_update() {
       -o Dpkg::Lock::Timeout=600 \
       -o Acquire::Retries=0 \
       -o Acquire::http::Timeout="${DOWNLOAD_TIMEOUT_SECONDS}" \
-      -o Acquire::https::Timeout="${DOWNLOAD_TIMEOUT_SECONDS}"
+      -o Acquire::https::Timeout="${DOWNLOAD_TIMEOUT_SECONDS}" \
+      "${proxy_opts[@]}" \
+      "${ca_opts[@]}"
 }
 
 apt_upgrade() {
-  local confirm=()
+  local confirm=() proxy_opts=() ca_opts=()
   [[ "$AUTO_CONFIRM" == "true" ]] && confirm=(-y)
+  if [[ "${USE_PROXY:-false}" == "true" && -n "${HTTPS_PROXY:-}" ]]; then
+    proxy_opts=(-o Acquire::http::Proxy="$HTTPS_PROXY" -o Acquire::https::Proxy="$HTTPS_PROXY")
+  fi
+  if [[ -n "${TEMP_CERT_FILE:-}" ]]; then
+    ca_opts=(-o Acquire::https::Verify-Peer=true -o Acquire::https::CaInfo="$TEMP_CERT_FILE")
+  fi
   run_with_retries \
     "apt-get upgrade" "" \
     sudo -E DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a \
@@ -207,12 +223,20 @@ apt_upgrade() {
       -o Dpkg::Options::="--force-confdef" \
       -o Dpkg::Options::="--force-confold" \
       -o Acquire::http::Timeout="${DOWNLOAD_TIMEOUT_SECONDS}" \
-      -o Acquire::https::Timeout="${DOWNLOAD_TIMEOUT_SECONDS}"
+      -o Acquire::https::Timeout="${DOWNLOAD_TIMEOUT_SECONDS}" \
+      "${proxy_opts[@]}" \
+      "${ca_opts[@]}"
 }
 
 apt_install() {
-  local confirm=()
+  local confirm=() proxy_opts=() ca_opts=()
   [[ "$AUTO_CONFIRM" == "true" ]] && confirm=(-y)
+  if [[ "${USE_PROXY:-false}" == "true" && -n "${HTTPS_PROXY:-}" ]]; then
+    proxy_opts=(-o Acquire::http::Proxy="$HTTPS_PROXY" -o Acquire::https::Proxy="$HTTPS_PROXY")
+  fi
+  if [[ -n "${TEMP_CERT_FILE:-}" ]]; then
+    ca_opts=(-o Acquire::https::Verify-Peer=true -o Acquire::https::CaInfo="$TEMP_CERT_FILE")
+  fi
   run_with_retries \
     "apt-get install $*" "" \
     sudo -E DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a \
@@ -223,12 +247,20 @@ apt_install() {
       -o Dpkg::Options::="--force-confold" \
       -o Acquire::http::Timeout="${DOWNLOAD_TIMEOUT_SECONDS}" \
       -o Acquire::https::Timeout="${DOWNLOAD_TIMEOUT_SECONDS}" \
+      "${proxy_opts[@]}" \
+      "${ca_opts[@]}" \
       "$@"
 }
 
 apt_remove() {
   local confirm=()
   [[ "$AUTO_CONFIRM" == "true" ]] && confirm=(-y)
+  if [[ "${USE_PROXY:-false}" == "true" && -n "${HTTPS_PROXY:-}" ]]; then
+    proxy_opts=(-o Acquire::http::Proxy="$HTTPS_PROXY" -o Acquire::https::Proxy="$HTTPS_PROXY")
+  fi
+  if [[ -n "${TEMP_CERT_FILE:-}" ]]; then
+    ca_opts=(-o Acquire::https::Verify-Peer=true -o Acquire::https::CaInfo="$TEMP_CERT_FILE")
+  fi
   run_with_retries \
     "apt-get remove $*" "" \
     sudo -E apt-get "${confirm[@]}" remove \
@@ -236,41 +268,67 @@ apt_remove() {
       -o Acquire::Retries=0 \
       -o Acquire::http::Timeout="${DOWNLOAD_TIMEOUT_SECONDS}" \
       -o Acquire::https::Timeout="${DOWNLOAD_TIMEOUT_SECONDS}" \
+      "${proxy_opts[@]}" \
+      "${ca_opts[@]}" \
       "$@"
 }
 
 # ---------------------------- DNF -------------------------------------------
 dnf_install() {
-  local confirm=()
-  [[ "$AUTO_CONFIRM" == "true" ]] && confirm (-y)
+  local confirm=() proxy_opts=() ca_opts=()
+  [[ "$AUTO_CONFIRM" == "true" ]] && confirm=(-y)
+  if [[ "${USE_PROXY:-false}" == "true" && -n "${HTTPS_PROXY:-}" ]]; then
+    proxy_opts=(--setopt=proxy="${HTTPS_PROXY}")
+  fi
+  if [[ -n "${TEMP_CERT_FILE:-}" ]]; then
+    ca_opts=(--setopt=sslverify=True --setopt=sslcacert="${TEMP_CERT_FILE}")
+  fi
   run_with_retries \
     "dnf install $*" "" \
     sudo -E dnf "${confirm[@]}" install ${CUSTOM_FLAGS:+$CUSTOM_FLAGS} \
       --setopt=skip_if_unavailable=False \
       --setopt=timeout="${DOWNLOAD_TIMEOUT_SECONDS}" \
       "${DNF_IPv4_OPT[@]}" \
+      "${proxy_opts[@]}" \
+      "${ca_opts[@]}" \
       "$@"
 }
 dnf_remove() {
-  local confirm=()
-  [[ "$AUTO_CONFIRM" == "true" ]] && confirm (-y)
+  local confirm=() proxy_opts=() ca_opts=()
+  [[ "$AUTO_CONFIRM" == "true" ]] && confirm=(-y)
+  if [[ "${USE_PROXY:-false}" == "true" && -n "${HTTPS_PROXY:-}" ]]; then
+    proxy_opts=(--setopt=proxy="${HTTPS_PROXY}")
+  fi
+  if [[ -n "${TEMP_CERT_FILE:-}" ]]; then
+    ca_opts=(--setopt=sslverify=True --setopt=sslcacert="${TEMP_CERT_FILE}")
+  fi
   run_with_retries \
     "dnf remove $*" "" \
     sudo -E dnf "${confirm[@]}" remove \
       --setopt=skip_if_unavailable=False \
       --setopt=timeout="${DOWNLOAD_TIMEOUT_SECONDS}" \
       "${DNF_IPv4_OPT[@]}" \
+      "${proxy_opts[@]}" \
+      "${ca_opts[@]}" \
       "$@"
 }
 dnf_update() {
   local confirm=()
-  [[ "$AUTO_CONFIRM" == "true" ]] && confirm (-y)
+  [[ "$AUTO_CONFIRM" == "true" ]] && confirm=(-y)
+  if [[ "${USE_PROXY:-false}" == "true" && -n "${HTTPS_PROXY:-}" ]]; then
+    proxy_opts=(--setopt=proxy="${HTTPS_PROXY}")
+  fi
+  if [[ -n "${TEMP_CERT_FILE:-}" ]]; then
+    ca_opts=(--setopt=sslverify=True --setopt=sslcacert="${TEMP_CERT_FILE}")
+  fi
   run_with_retries \
     "dnf upgrade" "" \
     sudo -E dnf "${confirm[@]}" upgrade \
       --setopt=skip_if_unavailable=False \
       --setopt=timeout="${DOWNLOAD_TIMEOUT_SECONDS}" \
-      "${DNF_IPv4_OPT[@]}"
+      "${DNF_IPv4_OPT[@]}" \
+      "${proxy_opts[@]}" \
+      "${ca_opts[@]}"
 }
 
 # --------------------------- pacman / yay / paru -----------------------------
@@ -278,16 +336,16 @@ dnf_update() {
 _make_pacman_conf() {
   local outconf; outconf="$(mktemp)"
   cp /etc/pacman.conf "$outconf"
+  # Add XferCommand if not present (or append a second one specific for this run)
   local curl_flags=(-L -C - --retry 3 --retry-delay 3 --connect-timeout "${DOWNLOAD_TIMEOUT_SECONDS}" --max-time "${DOWNLOAD_TIMEOUT_SECONDS}" "${PACMAN_CURL_IPv4[@]}")
   if [[ "${USE_PROXY:-false}" == "true" && -n "${HTTPS_PROXY:-}" ]]; then
     curl_flags=(--proxy "${HTTPS_PROXY}" "${curl_flags[@]}")
     [[ -n "${TEMP_CERT_FILE}" ]] && curl_flags=(--cacert "${TEMP_CERT_FILE}" "${curl_flags[@]}")
   fi
-  {
-    echo ""
-    echo "# Injected by package-mgr wrapper"
-    echo "XferCommand = /usr/bin/curl ${curl_flags[*]} -o %o %u"
-  } >> "$outconf"
+  # shellcheck disable=SC2129
+  echo "" >> "$outconf"
+  echo "# Injected by package-mgr wrapper" >> "$outconf"
+  echo "XferCommand = /usr/bin/curl ${curl_flags[*]} -o %o %u" >> "$outconf"
   echo "$outconf"
 }
 
@@ -306,13 +364,14 @@ pacman_remove()  { pacman_run "pacman -R ${*}" -R "$@"; }
 pacman_update()  { pacman_run "pacman -Syu" -Syu ${CUSTOM_FLAGS:+$CUSTOM_FLAGS}; }
 
 yay_paru_run() {
+  # For AUR helpers, we still get retries/timeouts at the HTTP layer (curl via env/proxy)
   local exe="$1"; shift
   local confirm=()
   [[ "$AUTO_CONFIRM" == "true" ]] && confirm=(--noconfirm)
   run_with_retries "$exe $*" "" "$exe" "${confirm[@]}" ${CUSTOM_FLAGS:+$CUSTOM_FLAGS} "$@"
 }
 
-# -------------------- os-release based PM detection --------------------------
+# -------------------- os-release based PM detection (minimal) ----------------
 detect_pm_from_os_release() {
   local pm=""
   if [[ -r /etc/os-release ]]; then
@@ -322,18 +381,14 @@ detect_pm_from_os_release() {
 
     if [[ "$id" == "arch" || "$like" == *"arch"* ]]; then
       pm="pacman"
-
-    elif [[ "$id" =~ ^(debian|ubuntu|linuxmint|kali|raspbian|pop)$ || \
-            "$like" == *"debian"* || "$like" == *"ubuntu"* ]]; then
+    elif [[ "$id" =~ ^(debian|ubuntu|linuxmint|kali|raspbian|pop)$ || "$like" == *"debian"* || "$like" == *"ubuntu"* ]]; then
       pm="apt"
-
-    elif [[ "$id" =~ ^(rhel|centos|fedora|rocky|almalinux|ol|oraclelinux)$ || \
-            "$like" == *"rhel"* || "$like" == *"fedora"* ]]; then
+    elif [[ "$id" =~ ^(rhel|centos|fedora|rocky|almalinux|ol|oraclelinux)$ || "$like" == *"rhel"* || "$like" == *"fedora"* ]]; then
       pm="dnf"
     fi
   fi
 
-  # Fallback if ambiguous/missing
+  # Fallback to binary probing only if os-release was inconclusive/missing
   if [[ -z "$pm" ]]; then
     if command -v apt-get >/dev/null 2>&1 || command -v apt >/dev/null 2>&1; then
       pm="apt"
@@ -350,6 +405,8 @@ detect_pm_from_os_release() {
 # ------------------------------ main -----------------------------------------
 main() {
   # privilege model:
+  # - AUR helpers must NOT run as root
+  # - native managers typically need root/sudo
   if [[ "$USE_AUR" == "true" ]]; then
     if [[ $EUID -eq 0 ]]; then
       fc_log_error "When using --use-aur, do not run as root/sudo."
@@ -368,31 +425,21 @@ main() {
   pm="$(detect_pm_from_os_release)"
 
   if [[ -z "$pm" ]]; then
-    fc_log_error "Unsupported platform: could not determine package manager from /etc/os-release."
+    fc_log_error "Unsupported distribution: could not determine package manager from /etc/os-release."
     return 2
   fi
 
+  # Reject AUR unless Arch-like
   if [[ "$USE_AUR" == "true" && "$pm" != "pacman" ]]; then
     fc_log_error "--use-aur is only valid on Arch-based systems."
     exit 1
   fi
 
   case "$pm" in
-    apt)
-      case "$action" in
-        install) apt_install  ${packages//,/ } ;;
-        remove)  apt_remove   ${packages//,/ } ;;
-        update)  apt_update && apt_upgrade ;;
-        *) fc_log_error "No action specified (--install/--remove/--system-update)."; exit 1 ;;
-      esac
-      rc=$?
-      normalize_return_code "$rc" "apt"; return $?
-      ;;
-
     dnf)
       case "$action" in
-        install) dnf_install  ${packages//,/ } ;;
-        remove)  dnf_remove   ${packages//,/ } ;;
+        install) dnf_install ${packages//,/ } ;;
+        remove)  dnf_remove  ${packages//,/ } ;;
         update)  dnf_update ;;
         *) fc_log_error "No action specified (--install/--remove/--system-update)."; exit 1 ;;
       esac
@@ -409,9 +456,9 @@ main() {
           fc_log_error "AUR mode requested but no yay/paru installed."; exit 1
         fi
         case "$action" in
-          install) yay_paru_run "$aur" -S   --needed ${packages//,/ } ;;
-          remove)  yay_paru_run "$aur" -R   ${packages//,/ } ;;
-          update)  yay_paru_run "$aur" -Syu ;;
+          install) yay_paru_run "$aur" -S    --needed ${packages//,/ } ;;
+          remove)  yay_paru_run "$aur" -R    ${packages//,/ } ;;
+          update)  yay_paru_run "$aur" -Syu  ;;
           *) fc_log_error "No action specified (--install/--remove/--system-update)."; exit 1 ;;
         esac
         rc=$?
@@ -427,13 +474,26 @@ main() {
       normalize_return_code "$rc" "pacman"; return $?
       ;;
 
+    apt)
+      case "$action" in
+        install) apt_install ${packages//,/ } ;;
+        remove)  apt_remove  ${packages//,/ } ;;
+        update)  apt_update && apt_upgrade ;;
+        *) fc_log_error "No action specified (--install/--remove/--system-update)."; exit 1 ;;
+      esac
+      rc=$?
+      normalize_return_code "$rc" "apt"; return $?
+      ;;
+
     *)
-      fc_log_error "Unsupported platform family in /etc/os-release (ID=${ID:-?} ID_LIKE=${ID_LIKE:-?})."
+      fc_log_error "Unsupported platform family in /etc/os-release."
       return 2
       ;;
   esac
 }
 
+# cleanup temp cert if created
 trap '[[ -n "${TEMP_CERT_FILE:-}" ]] && rm -f "$TEMP_CERT_FILE" || true' EXIT
+
 main
 

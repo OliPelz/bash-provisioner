@@ -1,4 +1,3 @@
-# force_ipv4.sh
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
@@ -34,7 +33,6 @@ fi
 
 # ---- pacman: Force IPv4 via XferCommand (curl) if not already set
 if command -v pacman >/dev/null 2>&1; then
-  # Backup once
   [[ -f /etc/pacman.conf.bak ]] || sudo cp /etc/pacman.conf /etc/pacman.conf.bak
   if ! grep -q '^\s*XferCommand\s*=' /etc/pacman.conf; then
     sudo tee -a /etc/pacman.conf >/dev/null <<'EOF'
@@ -49,11 +47,9 @@ EOF
 fi
 
 # ---- System-wide: disable IPv6 (runtime + persistent)
-# Runtime (non-breaking if already disabled)
 sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1 >/dev/null || true
 sudo sysctl -w net.ipv6.conf.default.disable_ipv6=1 >/dev/null || true
 
-# Persistent
 sudo tee /etc/sysctl.d/99-disable-ipv6.conf >/dev/null <<'EOF'
 net.ipv6.conf.all.disable_ipv6=1
 net.ipv6.conf.default.disable_ipv6=1
