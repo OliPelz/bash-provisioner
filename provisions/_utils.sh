@@ -19,6 +19,8 @@ if [[ "${CREDENTIALS_READABLE:-}" != "itworks" ]]; then
        return 1
 fi
 
+# --- include external binaries into PATH
+export PATH=${PROV_UTILS_FILE_DIR}/bin:$PATH
 
 # --- source section
 
