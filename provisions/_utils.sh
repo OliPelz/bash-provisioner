@@ -19,12 +19,12 @@ if [[ "${CREDENTIALS_READABLE:-}" != "itworks" ]]; then
        return 1
 fi
 
-# --- include external binaries into PATH
-export PATH=${PROV_UTILS_FILE_DIR}/bin:$PATH
 
-# --- source section
 
-source ${PROV_UTILS_FILE_DIR}/_test_framework.sh
+# source other scripts
+
+source "${PROV_UTILS_FILE_DIR}"/_package_mgr.sh
+source "${PROV_UTILS_FILE_DIR}"/_proxy_wrappers.sh
 
 # --- functions
 

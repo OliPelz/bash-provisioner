@@ -1,42 +1,35 @@
 #!/usr/bin/env bash
-set -Eeuo pipefail
-trap 'rc=$?; echo -e "\e[31m[TEST-ERROR]\e[0m $0:$LINENO: \"$BASH_COMMAND\" exited with $rc" >&2' ERR
+# shUnit2 suite: update_system_packages
+set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-export TEST_FAIL_FAST=1
-source "${ROOT_DIR}/_utils.sh"
 
-success "Now executing $(basename "$0")"
+command -v shunit2 >/dev/null 2>&1 || { echo "shunit2 not found in PATH" >&2; exit 1; }
 
-if command -v apt >/dev/null 2>&1; then
-  upgradable="$(apt list --upgradable 2>/dev/null | awk 'NR>1')"
-  [[ -z "$upgradable" ]] || { printf '%s\n' "$upgradable" >&2; fail "APT shows pending upgrades"; }
-  success "APT reports no pending upgrades"
+test_no_pending_updates() {
+  if command -v apt >/dev/null 2>&1; then
+    local upgradable
+    upgradable="$(apt list --upgradable 2>/dev/null | awk 'NR>1')"
+    [[ -n "$upgradable" ]] && printf '%s\n' "$upgradable" >&2
+    assertTrue "APT shows pending upgrades" "[[ -z \"$upgradable\" ]]"
 
-elif command -v pacman >/dev/null 2>&1; then
-  if pacman -Qu 2>/dev/null | grep -q .; then
-    pacman -Qu 2>/dev/null | sed 's/^/   - /' >&2 || true
-    fail "pacman shows pending upgrades"
-  fi
-  success "pacman reports no pending upgrades"
+  elif command -v pacman >/dev/null 2>&1; then
+    if pacman -Qu 2>/dev/null | grep -q .; then pacman -Qu 2>/dev/null | sed 's/^/   - /' >&2 || true; fi
+    assertFalse "pacman shows pending upgrades" "pacman -Qu 2>/dev/null | grep -q ."
 
-elif command -v dnf >/dev/null 2>&1; then
-  if dnf -q check-update >/dev/null 2>&1; then
-    success "DNF reports no pending upgrades"
-  else
-    code=$?
-    if [[ "$code" -eq 100 ]]; then
-      dnf -q check-update || true
-      fail "DNF shows pending upgrades"
-    else
-      fail "DNF check-update returned error code $code"
+  elif command -v dnf >/dev/null 2>&1; then
+    dnf -q check-update >/dev/null 2>&1
+    local code=$?
+    if [[ "$code" -ne 0 ]]; then
+      [[ "$code" -eq 100 ]] && dnf -q check-update || true
     fi
+    assertTrue "DNF shows pending upgrades (rc=$code)" "[[ $code -eq 0 ]]"
+
+  else
+    fail "Unsupported or unknown package manager; cannot verify update state"
   fi
+}
 
-else
-  fail "Unsupported or unknown package manager; cannot verify update state"
-fi
-
-success "update_system_packages: host is fully updated"
+. "$(command -v shunit2)"
 

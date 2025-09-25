@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-set -Eeuo pipefail
-trap 'rc=$?; echo -e "\e[31m[TEST-ERROR]\e[0m $0:$LINENO: \"$BASH_COMMAND\" exited with $rc" >&2' ERR
+# shUnit2 suite: dev tools
+set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-export TEST_FAIL_FAST=1
-source "${ROOT_DIR}/_utils.sh"
 
-success "Now executing $(basename "$0")"
+command -v shunit2 >/dev/null 2>&1 || { echo "shunit2 not found in PATH" >&2; exit 1; }
 
-for b in gcc make; do
-  command -v "$b" >/dev/null 2>&1 || fail "binary missing: $b"
-  success "binary available: $b"
-done
+test_dev_toolchain_binaries() {
+  for b in gcc make; do
+    assertTrue "binary missing: $b" "command -v $b >/dev/null 2>&1"
+  done
+}
 
-success "dev_tools: all checks passed"
+. "$(command -v shunit2)"
+

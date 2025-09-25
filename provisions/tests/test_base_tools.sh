@@ -1,19 +1,16 @@
 #!/usr/bin/env bash
-set -Eeuo pipefail
-trap 'rc=$?; echo -e "\e[31m[TEST-ERROR]\e[0m $0:$LINENO: \"$BASH_COMMAND\" exited with $rc" >&2' ERR
+# shUnit2 suite: base tools
+set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-export TEST_FAIL_FAST=1
-source "${ROOT_DIR}/_utils.sh"
 
-success "Now executing $(basename "$0")"
+# Require shunit2 in PATH
+command -v shunit2 >/dev/null 2>&1 || { echo "shunit2 not found in PATH" >&2; exit 1; }
 
-# Respect the version the host was provisioned with (or default)
-YQ_VERSION="${YQ_VERSION:-4.45.1}"
 export PATH="$HOME/bin:$PATH"
+YQ_VERSION="${YQ_VERSION:-4.45.1}"
 
-# helper: some tools might live in sbin
 has_bin() {
   local b="$1"
   command -v "$b" >/dev/null 2>&1 && return 0
@@ -23,50 +20,45 @@ has_bin() {
   return 1
 }
 
-# --- yq symlink & version ---
-if [[ -L "$HOME/bin/yq" ]]; then
+test_yq_symlink_and_version() {
+  assertTrue "yq symlink should exist at \$HOME/bin/yq" "[ -L \"$HOME/bin/yq\" ]"
+  local target
   target="$(readlink -f "$HOME/bin/yq" || true)"
-  [[ -n "${target:-}" ]] || fail "yq symlink target is empty"
-  [[ -f "$target" ]]     || fail "yq symlink target missing: ${target:-<none>}"
-  [[ -x "$target" ]]     || fail "yq symlink target not executable: $target"
+  assertNotNull "yq symlink target must not be empty" "$target"
+  assertTrue "yq symlink target missing: ${target:-<none>}" "[ -f \"$target\" ]"
+  assertTrue "yq target not executable: $target" "[ -x \"$target\" ]"
 
+  local installed_raw installed
   installed_raw="$("$HOME/bin/yq" --version 2>/dev/null || true)"
   installed="$(printf '%s' "$installed_raw" | sed -E 's/.*v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/')"
-  assert_eq "$YQ_VERSION" "$installed" "yq version should match"
-  success "yq present via symlink and version is $installed"
-else
-  fail "yq symlink missing at \$HOME/bin/yq"
-fi
+  assertEquals "yq version should match" "$YQ_VERSION" "$installed"
+}
 
-# --- binaries present ---
-for b in htop xclip tmux jq curl; do
-  if has_bin "$b"; then
-    success "binary available: $b"
-  else
-    fail "binary missing: $b"
+test_base_binaries_present() {
+  for b in htop xclip tmux jq curl; do
+    assertTrue "binary missing: $b" "command -v $b >/dev/null 2>&1"
+  done
+}
+
+test_net_tools_present() {
+  local cond='command -v ifconfig >/dev/null 2>&1 || command -v netstat >/dev/null 2>&1'
+  assertTrue "net-tools not found (ifconfig/netstat)" "$cond"
+}
+
+test_pkg_mgr_conf_nonfatal_info() {
+  if command -v dpkg >/dev/null 2>&1; then
+    for p in htop net-tools xclip tmux jq curl; do
+      dpkg -s "$p" >/dev/null 2>&1 && echo "[INFO] dpkg shows installed: $p" || true
+    done
+  elif command -v pacman >/dev/null 2>&1; then
+    for p in htop net-tools xclip tmux jq curl; do
+      pacman -Q "$p" >/dev/null 2>&1 && echo "[INFO] pacman shows installed: $p" || true
+    done
+  elif command -v rpm >/dev/null 2>&1; then
+    for p in htop net-tools xclip tmux jq curl; do
+      rpm -q "$p" >/dev/null 2>&1 && echo "[INFO] rpm shows installed: $p" || true
+    done
   fi
-done
+}
 
-# --- net-tools ---
-if has_bin ifconfig || has_bin netstat; then
-  success "net-tools present (ifconfig/netstat)"
-else
-  fail "net-tools not found (ifconfig/netstat)"
-fi
-
-# --- optional package manager confirmations (non-fatal info) ---
-if command -v dpkg >/dev/null 2>&1; then
-  for p in htop net-tools xclip tmux jq curl; do
-    dpkg -s "$p" >/dev/null 2>&1 && success "dpkg shows installed: $p" || true
-  done
-elif command -v pacman >/dev/null 2>&1; then
-  for p in htop net-tools xclip tmux jq curl; do
-    pacman -Q "$p" >/dev/null 2>&1 && success "pacman shows installed: $p" || true
-  done
-elif command -v rpm >/dev/null 2>&1; then
-  for p in htop net-tools xclip tmux jq curl; do
-    rpm -q "$p" >/dev/null 2>&1 && success "rpm shows installed: $p" || true
-  done
-fi
-
-success "base_tools: all checks passed"
+. "$(command -v shunit2)"

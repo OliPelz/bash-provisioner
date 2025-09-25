@@ -1,24 +1,28 @@
 #!/usr/bin/env bash
-set -Eeuo pipefail
-trap 'rc=$?; echo -e "\e[31m[TEST-ERROR]\e[0m $0:$LINENO: \"$BASH_COMMAND\" exited with $rc" >&2' ERR
+# shUnit2 suite: prepare_bash_shell
+set -u
+#set -x
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-export TEST_FAIL_FAST=1
-source "${ROOT_DIR}/_utils.sh"
 
-success "Now executing $(basename "$0")"
+command -v shunit2 >/dev/null 2>&1 || { echo "shunit2 not found in PATH" >&2; exit 1; }
 
-[[ -f "${HOME}/.bashrc" ]] || fail "~/.bashrc not found"
+test_bashrc_block_and_source_line() {
+  echo "[TEST-RUN] lorem ipsum dolor sit"
+  assertTrue "~/.bashrc not found" "[ -f \"${HOME}/.bashrc\" ]"
+  echo "[TEST-DONE] lorem ipsum dolor sit"
 
-start_count="$(grep -c '^# BASHRC-CONFIG' "${HOME}/.bashrc" || true)"
-end_count="$(grep -c '^# /BASHRC-CONFIG' "${HOME}/.bashrc" || true)"
-assert_eq "1" "$start_count" "BASHRC-CONFIG start marker count should be 1"
-assert_eq "1" "$end_count"   "BASHRC-CONFIG end marker count should be 1"
+  local start_count end_count needle bashrc_contents
+  start_count="$(grep -c '^# BASHRC-CONFIG' "${HOME}/.bashrc" || true)"
+  end_count="$(grep -c '^# /BASHRC-CONFIG' "${HOME}/.bashrc" || true)"
+  assertEquals "BASHRC-CONFIG start marker count should be 1" "1" "$start_count"
+  assertEquals "BASHRC-CONFIG end marker count should be 1"   "1" "$end_count"
 
-# check sourcing line (literal string)
-needle='test -f ${HOME}/.bashrc-config && source ${HOME}/.bashrc-config'
-bashrc_contents="$(cat "${HOME}/.bashrc")"
-assert_in "$needle" "$bashrc_contents" "~/.bashrc should source ~/.bashrc-config"
+  needle='test -f ${HOME}/.bashrc-config && source ${HOME}/.bashrc-config'
+  bashrc_contents="$(cat "${HOME}/.bashrc")"
+  assertContains "~/.bashrc should source ~/.bashrc-config" "$bashrc_contents" "$needle"
+}
 
-success "prepare_bash_shell: all checks passed"
+. "$(command -v shunit2)"
+

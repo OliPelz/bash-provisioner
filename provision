@@ -5,6 +5,14 @@ trap 'rc=$?; echo -e "\e[31m[WRAPPER-ERROR]\e[0m $0:$LINENO: \"$BASH_COMMAND\" e
 
 this_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# --- import external binaries in PATH
+export PATH=${this_script_dir}/include_bins/shunit2:$PATH
+
+if ! command -v shunit2 >/dev/null; then
+    printf "\033[0;32m[ERROR]\033[0m cannot find or exec shunit2"
+    exit 1
+fi
+
 # defaults
 dry_run=0
 filter=""
@@ -15,6 +23,8 @@ run_script_only=0
 # --- tiny logging -------------------------------------------------------------
 log() { printf "%s\n" "$*"; }
 log_dry() { printf "\033[0;32m[DRY_RUN]\033[0m %s\n" "$*"; }
+
+
 
 usage() {
   cat <<EOF
@@ -102,7 +112,7 @@ while IFS= read -r script_name; do
   in_filter "$script_name" || continue
 
   script_path="${this_script_dir}/provisions/${script_name}"
-  test_path="${this_script_dir}/provisions/tests/test_${script_name}"
+  test_path="${this_script_dir}/provisions/tests/test_$(basename "$script_name" .sh).bats"
 
   do_run_script=1
   do_run_test=1
