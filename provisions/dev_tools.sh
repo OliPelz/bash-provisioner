@@ -29,14 +29,15 @@ PKG_MGR_BIN="${SCRIPT_DIR}/package-mgr"
 # Map package names per family, but always invoke via package-mgr
 case "$distro" in
   debian|ubuntu)
-    PKGS="build-essential"
+    PKGS="build-essential,git"
     ;;
   arch)
-    PKGS="base-devel"
+    PKGS="base-devel,git"
     ;;
   rhel|centos|rocky|almalinux|fedora)
     # dnf groupinstall is not generic; use an explicit toolchain set
-    PKGS="gcc,gcc-c++,make,automake,autoconf,libtool,gettext,patch,pkgconf"
+    base_pkgs="gcc,gcc-c++,make,automake,autoconf,libtool,gettext,patch,pkgconf"
+    PKGS="${base_pkgs},git"
     ;;
   *)
     log ERROR "❌ Unsupported distro: $distro"; exit 1 ;;
