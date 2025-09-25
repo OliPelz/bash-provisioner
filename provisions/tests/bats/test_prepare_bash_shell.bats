@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-set -x
+#set -x
 if ! command -v bats >/dev/null; then
     printf "\033[0;32m[ERROR]\033[0m cannot find or exec bats"
     exit 1

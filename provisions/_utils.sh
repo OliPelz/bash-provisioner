@@ -1,5 +1,4 @@
 # --- global logic
-
 # prechecks when sourcing or running this script
 # possible values: development, test, production
 RUN_ENV="${RUN_ENV:-development}" 
@@ -25,7 +24,6 @@ fi
 
 source "${PROV_UTILS_FILE_DIR}"/_package_mgr.sh
 source "${PROV_UTILS_FILE_DIR}"/_proxy_wrappers.sh
-
 # --- functions
 
 _log_level_rank() {

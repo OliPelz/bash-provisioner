@@ -1,136 +1,115 @@
 #!/usr/bin/env bash
-# shUnit2 suite: force_ipv4.sh
+# shUnit2 suite: force_ipv4 post-checks (does NOT run the provisioner; only verifies results)
 set -u
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-UNDER_TEST="${ROOT_DIR}/force_ipv4.sh"
-
 command -v shunit2 >/dev/null 2>&1 || { echo "shunit2 not found in PATH" >&2; exit 1; }
+# Set test prefix for verbose output
+SHUNIT_TEST_PREFIX='TEST: '
 
-make_temp_env() {
-  TD="$(mktemp -d)"; export TD
-  ETC="${TD}/etc"; mkdir -p "${ETC}"/{apt/apt.conf.d,dnf,sysctl.d}
-  BIN="${TD}/bin"; mkdir -p "${BIN}"
-  export TEST_ETC="${TD}"
-  export PATH="${BIN}:${PATH}"
+# Helper function for verbose logging
+log_test() {
+    echo "  $1"
 }
 
-stub_common_tools() {
-  cat > "${BIN}/sudo" <<'EOF'; chmod +x "${BIN}/sudo"
-#!/usr/bin/env bash
-exec "$@"
-EOF
-  cat > "${BIN}/tee" <<'EOF'; chmod +x "${BIN}/tee"
-#!/usr/bin/env bash
-set -Eeuo pipefail
-map_path(){ local a="$1"; [[ "$a" == /etc/* ]] && echo "${TEST_ETC}${a}" || echo "$a"; }
-args=(); targets=()
-for a in "$@"; do
-  case "$a" in
-    -*) args+=("$a") ;;
-    *)  p="$(map_path "$a")"; args+=("$p"); targets+=("$p") ;;
-  esac
-done
-for t in "${targets[@]}"; do mkdir -p "$(dirname "$t")"; done
-exec /usr/bin/tee "${args[@]}"
-EOF
-  cat > "${BIN}/cp" <<'EOF'; chmod +x "${BIN}/cp"
-#!/usr/bin/env bash
-set -Eeuo pipefail
-map(){ [[ "$1" == /etc/* ]] && echo "${TEST_ETC}$1" || echo "$1"; }
-last="${@: -1}"; dest="$(map "$last")"
-mkdir -p "$(dirname "$dest")"
-mapped=()
-for a in "$@"; do mapped+=("$(map "$a")"); done
-exec /bin/cp "${mapped[@]}"
-EOF
-  cat > "${BIN}/awk" <<'EOF'; chmod +x "${BIN}/awk"
-#!/usr/bin/env bash
-set -Eeuo pipefail
-mapped=()
-for a in "$@"; do
-  [[ "$a" == /etc/* ]] && mapped+=("${TEST_ETC}$a") || mapped+=("$a")
-done
-exec /usr/bin/awk "${mapped[@]}"
-EOF
-  cat > "${BIN}/grep" <<'EOF'; chmod +x "${BIN}/grep"
-#!/usr/bin/env bash
-set -Eeuo pipefail
-mapped=()
-for a in "$@"; do
-  [[ "$a" == /etc/* ]] && mapped+=("${TEST_ETC}$a") || mapped+=("$a")
-done
-exec /bin/grep "${mapped[@]}"
-EOF
-  cat > "${BIN}/sysctl" <<'EOF'; chmod +x "${BIN}/sysctl"
-#!/usr/bin/env bash
-exit 0
-EOF
+# Helper: quick probes for PM families
+_has_apt() { command -v apt-get >/dev/null 2>&1 || command -v apt >/dev/null 2>&1; }
+_has_dnf() { command -v dnf >/dev/null 2>&1; }
+_has_pacman() { command -v pacman >/dev/null 2>&1 || [[ -f /etc/pacman.conf ]]; }
+
+test_sysctl_runtime_flags_are_set() {
+    echo "Running TEST: test_sysctl_runtime_flags_are_set"
+    log_test "Checking sysctl runtime flag net.ipv6.conf.all.disable_ipv6..."
+    local all_val
+    all_val="$(sysctl -n net.ipv6.conf.all.disable_ipv6 2>/dev/null || echo "")"
+    log_test "Result: net.ipv6.conf.all.disable_ipv6: '$all_val'"
+    assertNotNull "sysctl value for all.disable_ipv6 not readable" "$all_val"
+    assertEquals "IPv6 runtime: all should be disabled" "1" "$all_val"
+    log_test "Checking sysctl runtime flag net.ipv6.conf.default.disable_ipv6..."
+    local def_val
+    def_val="$(sysctl -n net.ipv6.conf.default.disable_ipv6 2>/dev/null || echo "")"
+    log_test "Result: net.ipv6.conf.default.disable_ipv6: '$def_val'"
+    assertNotNull "sysctl value for default.disable_ipv6 not readable" "$def_val"
+    assertEquals "IPv6 runtime: default should be disabled" "1" "$def_val"
 }
 
-stub_manager_presence() {
-  local want="${1:-}"
-  rm -f "${BIN}/apt-get" "${BIN}/dnf" "${BIN}/pacman"
-  case "$want" in
-    apt)    printf '#!/usr/bin/env bash\nexit 0\n' > "${BIN}/apt-get" ;;
-    dnf)    printf '#!/usr/bin/env bash\nexit 0\n' > "${BIN}/dnf" ;;
-    pacman) printf '#!/usr/bin/env bash\nexit 0\n' > "${BIN}/pacman" ;;
-    none|'') : ;;
-  esac
-  [[ -f "${BIN}/apt-get" ]] && chmod +x "${BIN}/apt-get"
-  [[ -f "${BIN}/dnf"     ]] && chmod +x "${BIN}/dnf"
-  [[ -f "${BIN}/pacman"  ]] && chmod +x "${BIN}/pacman"
+test_sysctl_persistent_file_written() {
+    echo "Running TEST: test_sysctl_persistent_file_written"
+    local f="/etc/sysctl.d/99-disable-ipv6.conf"
+    log_test "Checking if sysctl persistent file exists: $f..."
+    assertTrue "Persistent sysctl file missing: $f" "[ -f \"$f\" ]"
+    local contents
+    contents="$(cat "$f" 2>/dev/null || true)"
+    log_test "Checking sysctl file content for all.disable_ipv6=1..."
+    assertContains "sysctl file should set all.disable_ipv6=1" "$contents" "net.ipv6.conf.all.disable_ipv6=1"
+    log_test "Result: all.disable_ipv6=1 $(echo "$contents" | grep -q "net.ipv6.conf.all.disable_ipv6=1" && echo 'found' || echo 'not found')"
+    log_test "Checking sysctl file content for default.disable_ipv6=1..."
+    assertContains "sysctl file should set default.disable_ipv6=1" "$contents" "net.ipv6.conf.default.disable_ipv6=1"
+    log_test "Result: default.disable_ipv6=1 $(echo "$contents" | grep -q "net.ipv6.conf.default.disable_ipv6=1" && echo 'found' || echo 'not found')"
 }
 
-run_script() {
-  DISABLE_IPV6="${1:-}" TEST_ETC="${TEST_ETC}" PATH="${PATH}" bash -Eeuo pipefail "${UNDER_TEST}"
+test_apt_ipv4_config_written_when_apt_based() {
+    echo "Running TEST: test_apt_ipv4_config_written_when_apt_based"
+    if ! _has_apt; then
+        log_test "Not an APT-based system; skipping test"
+        startSkipping
+        assertTrue "Skipped: Not an APT-based system" "[ 1 -eq 1 ]"
+        return 0
+    fi
+    local f="/etc/apt/apt.conf.d/99force-ipv4"
+    log_test "Checking if APT IPv4 config file exists: $f..."
+    assertTrue "APT IPv4 config file missing: $f" "[ -f \"$f\" ]"
+    local c
+    c="$(cat "$f" 2>/dev/null || true)"
+    log_test "Checking APT config for ForceIPv4 setting..."
+    assertContains "APT config should force IPv4" "$c" 'Acquire::ForceIPv4 "true";'
+    log_test "Result: ForceIPv4 setting $(echo "$c" | grep -q 'Acquire::ForceIPv4 "true";' && echo 'found' || echo 'not found')"
 }
 
-test_early_exit_when_not_disabled() {
-  make_temp_env; stub_common_tools; stub_manager_presence none
-  run_script ""
-  assertTrue "apt conf should not exist when IPv6 not disabled" "[[ ! -e \"${ETC}/apt/apt.conf.d/99force-ipv4\" ]]"
-  assertTrue "sysctl conf should not exist when IPv6 not disabled" "[[ ! -e \"${ETC}/sysctl.d/99-disable-ipv6.conf\" ]]"
-  rm -rf "${TD}"
+test_dnf_ipv4_config_written_when_dnf_based() {
+    echo "Running TEST: test_dnf_ipv4_config_written_when_dnf_based"
+    if ! _has_dnf; then
+        log_test "Not a DNF-based system; skipping test"
+        startSkipping
+        assertTrue "Skipped: Not a DNF-based system" "[ 1 -eq 1 ]"
+        return 0
+    fi
+    local conf="/etc/dnf/dnf.conf"
+    local bak="/etc/dnf/dnf.conf.bak"
+    log_test "Checking if DNF config file exists: $conf..."
+    assertTrue "DNF conf missing: $conf" "[ -f \"$conf\" ]"
+    log_test "Checking if DNF backup file exists: $bak..."
+    assertTrue "DNF backup not created: $bak" "[ -f \"$bak\" ]"
+    local c
+    c="$(cat "$conf" 2>/dev/null || true)"
+    log_test "Checking DNF config for ip_resolve=4..."
+    assertContains "DNF config should set ip_resolve=4" "$c" "ip_resolve=4"
+    log_test "Result: ip_resolve=4 $(echo "$c" | grep -q "ip_resolve=4" && echo 'found' || echo 'not found')"
 }
 
-test_apt_path_writes_expected_files() {
-  make_temp_env; stub_common_tools; stub_manager_presence apt
-  run_script "true"
-  local apt_conf="${ETC}/apt/apt.conf.d/99force-ipv4"
-  assertTrue "APT force IPv4 file missing" "[ -f \"$apt_conf\" ]"
-  assertContains "APT config should force IPv4" "$(cat "$apt_conf")" 'Acquire::ForceIPv4 "true";'
-
-  local sysctl_conf="${ETC}/sysctl.d/99-disable-ipv6.conf"
-  assertTrue "sysctl IPv6 disable file missing" "[ -f \"$sysctl_conf\" ]"
-  assertContains "sysctl all disable"     "$(cat "$sysctl_conf")" 'net.ipv6.conf.all.disable_ipv6=1'
-  assertContains "sysctl default disable" "$(cat "$sysctl_conf")" 'net.ipv6.conf.default.disable_ipv6=1'
-  rm -rf "${TD}"
+test_pacman_xfercommand_ipv4_when_arch_based() {
+    echo "Running TEST: test_pacman_xfercommand_ipv4_when_arch_based"
+    if ! _has_pacman; then
+        log_test "Not an Arch-based system; skipping test"
+        startSkipping
+        assertTrue "Skipped: Not an Arch-based system" "[ 1 -eq 1 ]"
+        return 0
+    fi
+    local conf="/etc/pacman.conf"
+    local bak="/etc/pacman.conf.bak"
+    log_test "Checking if pacman config file exists: $conf..."
+    assertTrue "pacman.conf missing: $conf" "[ -f \"$conf\" ]"
+    log_test "Checking if pacman backup file exists: $bak..."
+    assertTrue "pacman backup not created: $bak" "[ -f \"$bak\" ]"
+    local c
+    c="$(cat "$conf" 2>/dev/null || true)"
+    log_test "Checking pacman config for curl XferCommand..."
+    assertContains "pacman conf should mention curl XferCommand" "$c" "XferCommand = /usr/bin/curl"
+    log_test "Result: curl XferCommand $(echo "$c" | grep -q "XferCommand = /usr/bin/curl" && echo 'found' || echo 'not found')"
+    log_test "Checking pacman config for --ipv4 in XferCommand..."
+    assertContains "pacman curl XferCommand should enforce IPv4" "$c" "--ipv4"
+    log_test "Result: --ipv4 in XferCommand $(echo "$c" | grep -q "--ipv4" && echo 'found' || echo 'not found')"
 }
 
-test_dnf_path_writes_expected_files() {
-  make_temp_env; stub_common_tools; stub_manager_presence dnf
-  printf '%s\n' '# sample' > "${ETC}/dnf/dnf.conf"
-  run_script "1"
-  assertTrue "dnf backup not created" "[ -f \"${ETC}/dnf/dnf.conf.bak\" ]"
-  local dnf_conf="${ETC}/dnf/dnf.conf"
-  assertTrue "dnf.conf missing" "[ -f \"$dnf_conf\" ]"
-  assertContains "DNF config should set ip_resolve=4" "$(cat "$dnf_conf")" 'ip_resolve=4'
-  assertTrue "sysctl IPv6 disable file missing (dnf path)" "[ -f \"${ETC}/sysctl.d/99-disable-ipv6.conf\" ]"
-  rm -rf "${TD}"
-}
-
-test_pacman_path_writes_expected_files() {
-  make_temp_env; stub_common_tools; stub_manager_presence pacman
-  printf '%s\n' '[options]' > "${ETC}/pacman.conf"
-  run_script "true"
-  local pacman_conf="${ETC}/pacman.conf"
-  assertTrue "pacman.conf missing" "[ -f \"$pacman_conf\" ]"
-  assertContains "pacman XferCommand exists"   "$(cat "$pacman_conf")" 'XferCommand = /usr/bin/curl'
-  assertContains "pacman XferCommand enforces IPv4" "$(cat "$pacman_conf")" '--ipv4'
-  rm -rf "${TD}"
-}
-
+# Load shUnit2
 . "$(command -v shunit2)"
-

@@ -1,6 +1,6 @@
 #!/bin/bash
 : '
-v.0.0.1
+v.0.0.2
 '
 
 function log_proxy_state {
@@ -48,7 +48,7 @@ function log_proxy_state {
 
 # --- helpers ------------------------------------------------------------------
 _is_true() { [[ "${1:-}" =~ ^([Tt][Rr][Uu][Ee]|1)$ ]]; }
-_make_tmp_ca() { mktemp /tmp/curl_wrapper_cert.XXXXXX; }
+_make_tmp_ca() { mktemp /tmp/pcurl_wrapper_cert.XXXXXX; }
 
 # --- function you can call after sourcing -------------------------------------
 pcurl_wrapper() {
@@ -90,6 +90,11 @@ EXIT CODES
     [[ -n "${HTTPS_PROXY:-}" ]] && cmd+=( --proxy "${HTTPS_PROXY}" )
   fi
 
+  # Force IPv4 when requested
+  if _is_true "${DISABLE_IPV6:-}"; then
+    cmd+=( --ipv4 )
+  fi
+
   # Prepend CA cert if provided
   if [[ -n "${CERT_BASE64_STRING:-}" ]]; then
     TEMP_CERT_FILE="$(_make_tmp_ca)"
@@ -109,7 +114,7 @@ EXIT CODES
   rc=$?
 
   # Cleanup
-  [[ -n "${TEMP_CERT_FILE}" ]] && rm -f "${TEMP_CERT_FILE}"
+  #[[ -n "${TEMP_CERT_FILE}" ]] && rm -f "${TEMP_CERT_FILE}"
 
   return "${rc}"
 }
@@ -231,6 +236,7 @@ function pwget_wrapper {
     local wget_cmd="wget"
     local proxy_cmd=""
     local cert_cmd=""
+    local ipv4_cmd=""
 
     if [ "${USE_PROXY,,}" == "true" ]; then
         if test_env_variable_defined CERT_BASE64_STRING; then
@@ -242,8 +248,13 @@ function pwget_wrapper {
         proxy_cmd="--proxy=${HTTPS_PROXY}"
     fi
 
+    # Force IPv4 when requested
+    if _is_true "${DISABLE_IPV6:-}"; then
+        ipv4_cmd="--inet4-only"
+    fi
+
     # Execute wget with the appropriate options
-    ${wget_cmd} ${proxy_cmd} ${cert_cmd} ${additional_params} "${url}"
+    ${wget_cmd} ${proxy_cmd} ${cert_cmd} ${ipv4_cmd} ${additional_params} "${url}"
     rc=$?
     # Clean up temporary cert file if created
     if [ -n "${TEMP_CERT_FILE}" ]; then
@@ -290,6 +301,7 @@ function pgit_wrapper {
     local proxy_cmd=""
     local cert_cmd=""
     local ssh_cmd=""
+    local ipver_opt=""
 
     # Set up proxy if needed
     if [ "${USE_PROXY,,}" == "true" ]; then
@@ -300,6 +312,11 @@ function pgit_wrapper {
             cert_cmd="http.sslCAInfo=${TEMP_CERT_FILE}"
         fi
         proxy_cmd="http.proxy=${HTTPS_PROXY}"
+    fi
+
+    # Force IPv4 when requested (git supports -4)
+    if _is_true "${DISABLE_IPV6:-}"; then
+        ipver_opt="-4"
     fi
 
     # Set up SSH key if provided
@@ -313,9 +330,9 @@ function pgit_wrapper {
 
     # Execute git command with SSH command if necessary
     if [ -n "${ssh_cmd}" ]; then
-        eval "${ssh_cmd} ${git_cmd} ${git_command} ${args}"
+        eval "${ssh_cmd} ${git_cmd} ${ipver_opt} ${git_command} ${args}"
     else
-        ${git_cmd} ${git_command} ${args}
+        ${git_cmd} ${ipver_opt} ${git_command} ${args}
     fi
     rc=$?
 
@@ -325,3 +342,4 @@ function pgit_wrapper {
     fi
     exit $rc
 }
+

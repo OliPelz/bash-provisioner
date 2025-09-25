@@ -112,7 +112,8 @@ while IFS= read -r script_name; do
   in_filter "$script_name" || continue
 
   script_path="${this_script_dir}/provisions/${script_name}"
-  test_path="${this_script_dir}/provisions/tests/test_$(basename "$script_name" .sh).bats"
+#  test_path="${this_script_dir}/provisions/tests/test_$(basename "$script_name" .sh).bats"
+  test_path="${this_script_dir}/provisions/tests/test_${script_name}"
 
   do_run_script=1
   do_run_test=1

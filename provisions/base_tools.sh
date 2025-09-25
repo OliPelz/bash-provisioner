@@ -13,7 +13,7 @@ PKG_TIMEOUT="${PKG_TIMEOUT:-600}"                 # forwarded to package-mgr --t
 CUSTOM_PKG_FLAGS="${CUSTOM_PKG_FLAGS:-}"          # forwarded to package-mgr --custom-flags "<...>"
 
 # --- Hard prerequisites ---
-check_commands_installed sudo mkdir curl test ln || {
+check_commands_installed sudo mkdir pcurl_wrapper test ln || {
    log ERROR "❌ Missing required commands."; exit 1; }
 
 # --- Main role logic ---
@@ -46,7 +46,7 @@ mkdir -p "$HOME/bin"
 # install yq (honors DISABLE_IPV6 via curl flag)
 if [[ ! -f "$HOME/bin/yq-versions/v${YQ_VERSION}/yq_linux_amd64" ]]; then
    mkdir -p "$HOME/bin/yq-versions/v${YQ_VERSION}"
-   curl -fL ${DISABLE_IPV6:+--ipv4} \
+   pcurl_wrapper -fL  \
      -o "$HOME/bin/yq-versions/v${YQ_VERSION}/yq_linux_amd64" \
      "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_amd64"
    chmod +x "$HOME/bin/yq-versions/v${YQ_VERSION}/yq_linux_amd64"
