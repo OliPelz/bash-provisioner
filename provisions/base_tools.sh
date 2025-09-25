@@ -32,7 +32,7 @@ if [[ ! -x "$PKG_MGR_BIN" ]]; then
 fi
 
 # Cross-distro package set (names align across Debian/Arch/Fedora families)
-PKGS="htop,net-tools,xclip,tmux,jq,curl"
+PKGS="htop,net-tools,xclip,tmux,jq,curl,file"
 
 # Build package-mgr command
 PM_CMD=( sudo -E "$PKG_MGR_BIN" --install "$PKGS" --timeout "$PKG_TIMEOUT" --auto-confirm )

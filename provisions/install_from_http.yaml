@@ -1,4 +1,4 @@
-gz_tar_balls:
+binary_gz_tar_balls:
   - link_name: keychain # manager for ssh sessions
     extract_dir: keychain-2.8.5
     path_to_bin: keychain
@@ -11,6 +11,10 @@ gz_tar_balls:
     extract_dir: hurl-4.2.0
     path_to_bin: hurl
     download_url: https://github.com/Orange-OpenSource/hurl/releases/download/4.2.0/hurl-4.2.0-x86_64-unknown-linux-gnu.tar.gz
+    ldd_dependencies:
+      - libxml2     # base name ok (matches libssl.so, libssl.so.X)
+      #- libcrypto   # base name ok
+      #- libz.so.1   # exact soname also ok
   - link_name: git-trim # trim local branches if remote are gone
     extract_dir: git-trim-v0.4.3
     path_to_bin: git-trim
